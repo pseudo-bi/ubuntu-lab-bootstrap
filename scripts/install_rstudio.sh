@@ -1,41 +1,48 @@
 #!/usr/bin/env bash
 set -e
 
-# Step 11: Install RStudio Server (best-effort, idempotent-ish)
-# amd64: install via Posit-provided .deb (Ubuntu 24 instructions currently point to jammy/amd64)
-# arm64: stable builds are not generally provided; daily builds exist but are experimental -> default skip
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck disable=SC1091
+source "$ROOT_DIR/config.sh"
 
-ARCH="$(dpkg --print-architecture)"
-DEB_URL_AMD64="https://download2.rstudio.org/server/jammy/amd64/rstudio-server-2026.01.0-392-amd64.deb"
-DEB_FILE="/tmp/rstudio-server-${ARCH}.deb"
-
-if dpkg -s rstudio-server >/dev/null 2>&1; then
-  echo "rstudio-server already installed"
+if [ "${ENABLE_RSTUDIO:-1}" -ne 1 ]; then
+  echo "RStudio disabled (ENABLE_RSTUDIO=${ENABLE_RSTUDIO})"
   exit 0
 fi
 
-sudo apt-get update -y
-sudo apt-get install -y gdebi-core
+need_cmd() { command -v "$1" >/dev/null 2>&1; }
 
-if [ "$ARCH" = "amd64" ]; then
-  cd /tmp
-  wget -O "$DEB_FILE" "$DEB_URL_AMD64"
-  sudo gdebi -n "$DEB_FILE"
-  sudo systemctl enable --now rstudio-server
-  echo "RStudio Server enabled (port 8787)"
-  exit 0
+echo "Installing R (if missing)..."
+if ! need_cmd R; then
+  sudo apt-get update
+  sudo apt-get install -y r-base
 fi
 
-if [ "$ARCH" = "arm64" ]; then
-  if [ "${ALLOW_RSTUDIO_DAILY_ARM64:-0}" = "1" ]; then
-    echo "arm64 detected. Posit stable builds are not generally available; daily builds are experimental."
-    echo "Install manually from the noble-arm64 daily index if you accept the risk."
-    echo "https://dailies.rstudio.com/rstudio/kousa-dogwood/server/noble-arm64/"
-    exit 2
-  fi
-  echo "arm64 detected. Skipping RStudio Server install (set ALLOW_RSTUDIO_DAILY_ARM64=1 to allow experimental manual path)."
-  exit 0
+R_PATH="$(readlink -f "$(command -v R)")"
+echo "Detected R: $R_PATH"
+
+echo "Installing rstudio-server (if missing)..."
+if ! dpkg -s rstudio-server >/dev/null 2>&1; then
+  sudo apt-get update
+  sudo apt-get install -y rstudio-server
 fi
 
-echo "Unsupported architecture: $ARCH"
-exit 1
+echo "Configuring /etc/rstudio/rserver.conf ..."
+sudo mkdir -p /etc/rstudio
+# 既存設定を壊さず、rsession-which-r だけを確実に入れる
+if [ -f /etc/rstudio/rserver.conf ]; then
+  sudo sed -i '/^rsession-which-r=/d' /etc/rstudio/rserver.conf
+fi
+echo "rsession-which-r=$R_PATH" | sudo tee -a /etc/rstudio/rserver.conf >/dev/null
+
+echo "Restarting rstudio-server..."
+sudo systemctl enable rstudio-server
+sudo systemctl restart rstudio-server || true
+
+if sudo systemctl is-active --quiet rstudio-server; then
+  echo "RStudio Server active (port ${RSTUDIO_PORT:-8787})"
+else
+  echo "RStudio Server failed. Recent logs:"
+  sudo journalctl -u rstudio-server.service -b --no-pager | tail -n 80
+  exit 1
+fi
