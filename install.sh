@@ -95,6 +95,21 @@ else
   msg "==> [SKIP] jupyterlab service (disabled by config.sh)"
 fi
 
+# -----------------------------
+# JupyterHub (multi-user)
+# -----------------------------
+if have_cmd systemctl && sudo systemctl list-unit-files 2>/dev/null | awk '{print $1}' | grep -qx "jupyterhub.service"; then
+  # unit exists -> if enabled or active, skip
+  if sudo systemctl is-enabled jupyterhub.service >/dev/null 2>&1 || sudo systemctl is-active jupyterhub.service >/dev/null 2>&1; then
+    skip_step "jupyterhub"
+  else
+    run_step "jupyterhub" "scripts/install_jupyterhub.sh"
+  fi
+else
+  # unit not present yet -> install
+  run_step "jupyterhub" "scripts/install_jupyterhub.sh"
+fi
+
 # rstudio-server (optional)
 if [ "$ENABLE_RSTUDIO" = "1" ]; then
   if have_dpkg_pkg "rstudio-server"; then
