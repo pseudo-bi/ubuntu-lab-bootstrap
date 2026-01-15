@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 msg() { printf '%s\n' "$*"; }
@@ -85,7 +85,7 @@ else
 fi
 
 # jupyterlab service (optional)
-if [ "$ENABLE_JUPYTER_SERVICE" = "1" ]; then
+if [ "${ENABLE_JUPYTER_SERVICE:-0}" = "1" ]; then
   if have_user_systemd_unit_enabled_or_running "jupyterlab.service"; then
     skip_step "jupyterlab service"
   else
@@ -98,20 +98,10 @@ fi
 # -----------------------------
 # JupyterHub (multi-user)
 # -----------------------------
-if have_cmd systemctl && sudo systemctl list-unit-files 2>/dev/null | awk '{print $1}' | grep -qx "jupyterhub.service"; then
-  # unit exists -> if enabled or active, skip
-  if sudo systemctl is-enabled jupyterhub.service >/dev/null 2>&1 || sudo systemctl is-active jupyterhub.service >/dev/null 2>&1; then
-    skip_step "jupyterhub"
-  else
-    run_step "jupyterhub" "scripts/install_jupyterhub.sh"
-  fi
-else
-  # unit not present yet -> install
-  run_step "jupyterhub" "scripts/install_jupyterhub.sh"
-fi
+run_step "jupyterhub" "scripts/install_jupyterhub.sh"
 
 # rstudio-server (optional)
-if [ "$ENABLE_RSTUDIO" = "1" ]; then
+if [ "${ENABLE_RSTUDIO:-0}" = "1" ]; then
   if have_dpkg_pkg "rstudio-server"; then
     skip_step "rstudio-server"
   else

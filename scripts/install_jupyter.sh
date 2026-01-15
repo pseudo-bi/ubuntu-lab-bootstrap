@@ -1,16 +1,20 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck disable=SC1091
 source "$ROOT_DIR/config.sh"
 
+msg() { printf '%s\n' "$*"; }
+
 MINICONDA_DIR="$CONDA_DIR"
 ENV_NAME="$CONDA_ENV_NAME"
 PY_VER="$CONDA_PYTHON_VERSION"
 
+: "${ENABLE_CONDA_AUTO_ACTIVATE:=0}"   # 0: 作らない, 1: /etc/profile.d/conda-lab.sh を作る
+
 if [ ! -f "$MINICONDA_DIR/etc/profile.d/conda.sh" ]; then
-  echo "conda.sh not found: $MINICONDA_DIR/etc/profile.d/conda.sh"
+  msg "conda.sh not found: $MINICONDA_DIR/etc/profile.d/conda.sh"
   exit 1
 fi
 
@@ -29,9 +33,8 @@ install_conda_lab_profile() {
   local tmp
   tmp="$(mktemp)"
 
-  # /etc/profile.d に置くファイルは、環境依存パスを埋め込んだ生成物にする
   printf "%s\n" \
-"# ubuntu-lab-bootstrap: auto-activate ${ENV_NAME} once, after shell init (interactive bash)" \
+"# ubuntu-lab-bootstrap: optional auto-activate ${ENV_NAME} for interactive bash" \
 "if [ -n \"\${BASH_VERSION-}\" ] && [[ \$- == *i* ]]; then" \
 "  _ulb_conda=\"${MINICONDA_DIR}/etc/profile.d/conda.sh\"" \
 "  if [ -f \"\$_ulb_conda\" ]; then" \
@@ -56,16 +59,21 @@ install_conda_lab_profile() {
 
   sudo install -m 0644 "$tmp" "$dst"
   rm -f "$tmp"
+  msg "profile.d installed: $dst"
 }
 
 conda_accept_tos_if_supported
 
 if ! conda env list | awk '{print $1}' | grep -qx "$ENV_NAME"; then
+  msg "==> conda create: $ENV_NAME (python=$PY_VER)"
   conda create -y -n "$ENV_NAME" python="$PY_VER"
+else
+  msg "==> conda env exists: $ENV_NAME"
 fi
 
 conda_accept_tos_if_supported
 
+msg "==> conda install (conda-forge): jupyterlab + scientific stack"
 conda install -y -n "$ENV_NAME" -c conda-forge \
   jupyterlab \
   ipykernel \
@@ -74,11 +82,19 @@ conda install -y -n "$ENV_NAME" -c conda-forge \
   matplotlib \
   scipy
 
-conda run -n "$ENV_NAME" python -m ipykernel install --user \
+msg "==> install kernelspec system-wide (visible to all users)"
+sudo mkdir -p /usr/local/share/jupyter
+conda run -n "$ENV_NAME" python -m ipykernel install \
+  --prefix=/usr/local \
   --name "$ENV_NAME" \
   --display-name "Python ($ENV_NAME)"
 
-install_conda_lab_profile
+if [ "$ENABLE_CONDA_AUTO_ACTIVATE" = "1" ]; then
+  msg "==> install /etc/profile.d/conda-lab.sh (auto-activate enabled)"
+  install_conda_lab_profile
+else
+  msg "==> skip /etc/profile.d/conda-lab.sh (auto-activate disabled)"
+fi
 
-echo "env ready: $ENV_NAME"
-echo "profile.d installed: /etc/profile.d/conda-lab.sh"
+msg "env ready: $ENV_NAME"
+msg "kernelspec installed under: /usr/local/share/jupyter/kernels/$ENV_NAME"
