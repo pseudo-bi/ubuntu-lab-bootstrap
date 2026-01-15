@@ -1,3 +1,4 @@
+# scripts/install_jupyterhub.sh
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -19,11 +20,6 @@ need_sudo() {
 is_systemd_unit_active() {
   local unit="$1"
   sudo systemctl is-active "$unit" >/dev/null 2>&1
-}
-
-is_systemd_unit_enabled() {
-  local unit="$1"
-  sudo systemctl is-enabled "$unit" >/dev/null 2>&1
 }
 
 write_if_changed() {
@@ -57,6 +53,8 @@ main() {
   : "${JUPYTERHUB_VENV:=/opt/jupyterhub}"
   : "${JUPYTERHUB_CONFIG:=/etc/jupyterhub/jupyterhub_config.py}"
   : "${JUPYTERHUB_SERVICE:=/etc/systemd/system/jupyterhub.service}"
+  : "${JUPYTERHUB_PAM_SERVICE:=jupyterhub}"
+  : "${JUPYTERHUB_PAM_FILE:=/etc/pam.d/jupyterhub}"
 
   if [ "$ENABLE_JUPYTERHUB" != "1" ]; then
     msg "JupyterHub disabled by config (ENABLE_JUPYTERHUB=$ENABLE_JUPYTERHUB)."
@@ -86,6 +84,14 @@ main() {
   sudo "$JUPYTERHUB_VENV/bin/pip" install --upgrade pip
   sudo "$JUPYTERHUB_VENV/bin/pip" install --upgrade jupyterhub jupyterlab
 
+  msg "==> write PAM service: $JUPYTERHUB_PAM_FILE"
+  write_if_changed "$JUPYTERHUB_PAM_FILE" 0644 \
+"auth      required pam_env.so" \
+"auth      required pam_unix.so" \
+"account   required pam_unix.so" \
+"session   required pam_limits.so" \
+"session   required pam_unix.so"
+
   msg "==> write config: $JUPYTERHUB_CONFIG"
   write_if_changed "$JUPYTERHUB_CONFIG" 0644 \
 "c = get_config()" \
@@ -111,6 +117,17 @@ main() {
 "" \
 "[Install]" \
 "WantedBy=multi-user.target"
+
+  msg "==> ensure config points to PAM service: $JUPYTERHUB_PAM_SERVICE"
+  if ! sudo grep -qE '^\s*c\.PAMAuthenticator\.service\s*=' "$JUPYTERHUB_CONFIG" 2>/dev/null; then
+    # 追記 (既存が無い場合)
+    sudo tee -a "$JUPYTERHUB_CONFIG" >/dev/null <<EOF
+c.PAMAuthenticator.service = "${JUPYTERHUB_PAM_SERVICE}"
+EOF
+  else
+    # 既存がある場合は置換
+    sudo sed -i "s|^\s*c\.PAMAuthenticator\.service\s*=.*|c.PAMAuthenticator.service = \"${JUPYTERHUB_PAM_SERVICE}\"|g" "$JUPYTERHUB_CONFIG"
+  fi
 
   msg "==> systemd daemon-reload"
   sudo systemctl daemon-reload
