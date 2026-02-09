@@ -73,6 +73,11 @@ fi
 # miniconda
 if have_miniconda; then
   skip_step "miniconda"
+  # Exist check for safety
+  if [ -x "$CONDA_DIR/bin/conda" ]; then
+    msg "==> [CONFIG] Ensuring conda init bash..."
+    "$CONDA_DIR/bin/conda" init bash
+  fi
 else
   run_step "miniconda" "scripts/install_miniconda.sh"
 fi
