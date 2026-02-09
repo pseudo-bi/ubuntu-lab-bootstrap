@@ -24,7 +24,26 @@ echo "Detected R: $R_PATH"
 echo "Installing rstudio-server (if missing)..."
 if ! dpkg -s rstudio-server >/dev/null 2>&1; then
   sudo apt-get update
-  sudo apt-get install -y rstudio-server
+  sudo apt-get install -y gdebi-core
+
+  # RStudio Server 2024.04.1+748 for Ubuntu 22/24 (verify latest version if needed)
+  RSTUDIO_VER="2024.04.1-748"
+  RSTUDIO_DEB="rstudio-server-${RSTUDIO_VER}-amd64.deb"
+  RSTUDIO_URL="https://download2.rstudio.org/server/jammy/amd64/${RSTUDIO_DEB}"
+
+  echo "Downloading RStudio Server ${RSTUDIO_VER}..."
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSLO "${RSTUDIO_URL}"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -q "${RSTUDIO_URL}"
+  else
+    echo "Error: neither curl nor wget found."
+    exit 1
+  fi
+
+  echo "Installing package..."
+  sudo gdebi -n "${RSTUDIO_DEB}"
+  rm -f "${RSTUDIO_DEB}"
 fi
 
 echo "Configuring /etc/rstudio/rserver.conf ..."

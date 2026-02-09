@@ -83,11 +83,23 @@ conda install -y -n "$ENV_NAME" -c conda-forge \
   scipy
 
 msg "==> install kernelspec system-wide (visible to all users)"
-sudo mkdir -p /usr/local/share/jupyter
+msg "==> install kernelspec system-wide (visible to all users)"
+sudo mkdir -p /usr/local/share/jupyter/kernels
+
+# Create a temporary directory for the kernelspec
+tmp_dir=$(mktemp -d)
+
+# Install kernelspec to the temporary directory
 conda run -n "$ENV_NAME" python -m ipykernel install \
-  --prefix=/usr/local \
+  --prefix="${tmp_dir}" \
   --name "$ENV_NAME" \
   --display-name "Python ($ENV_NAME)"
+
+# Move it to the system location
+sudo cp -r "${tmp_dir}/share/jupyter/kernels/${ENV_NAME}" /usr/local/share/jupyter/kernels/
+
+# Cleanup
+rm -rf "${tmp_dir}"
 
 if [ "$ENABLE_CONDA_AUTO_ACTIVATE" = "1" ]; then
   msg "==> install /etc/profile.d/conda-lab.sh (auto-activate enabled)"

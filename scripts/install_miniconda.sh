@@ -1,18 +1,25 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PREFIX="${HOME}/miniconda3"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck disable=SC1091
+source "$ROOT_DIR/config.sh"
+
+PREFIX="${CONDA_DIR:-$HOME/miniconda3}"
 INSTALLER="Miniconda3-latest-Linux-x86_64.sh"
 URL="https://repo.anaconda.com/miniconda/${INSTALLER}"
 
+echo "Installing Miniconda to ${PREFIX}..."
+
 if [ -d "${PREFIX}" ]; then
-  echo "Miniconda already exists at ${PREFIX}"
-  echo "To reinstall cleanly:"
-  echo "  rm -rf \"${PREFIX}\""
-  exit 1
+  echo "Miniconda directory exists at ${PREFIX}"
+  echo "Updating existing installation..."
+  UPDATE_FLAG="-u"
+else
+  UPDATE_FLAG=""
 fi
 
-cd "${HOME}"
+cd "${HOME}" || exit 1
 
 if command -v curl >/dev/null 2>&1; then
   curl -fsSLO "${URL}"
@@ -23,17 +30,17 @@ else
   exit 1
 fi
 
-bash "${INSTALLER}" -b -p "${PREFIX}"
+bash "${INSTALLER}" -b $UPDATE_FLAG -p "${PREFIX}"
 rm -f "${INSTALLER}"
 
 "${PREFIX}/bin/conda" --version
 
-cat <<'EOF'
+cat <<EOF
 
 Miniconda installation finished.
 
 To use conda in this shell:
-  . "$HOME/miniconda3/etc/profile.d/conda.sh"
+  . "${PREFIX}/etc/profile.d/conda.sh"
 
 To activate base environment:
   conda activate base
@@ -42,6 +49,6 @@ Notes:
 - This script does not run "conda init"
 - No shell config files were modified
 - Removal:
-    rm -rf ~/miniconda3
+    rm -rf "${PREFIX}"
 
 EOF
