@@ -35,20 +35,23 @@ rm -f "${INSTALLER}"
 
 "${PREFIX}/bin/conda" --version
 
+"${PREFIX}/bin/conda" init bash
+
 cat <<EOF
 
 Miniconda installation finished.
+Your .bashrc has been modified to initialize conda.
 
-To use conda in this shell:
-  . "${PREFIX}/etc/profile.d/conda.sh"
+To use conda in this current shell session, please run:
+  source ~/.bashrc
 
 To activate base environment:
   conda activate base
 
 Notes:
-- This script does not run "conda init"
-- No shell config files were modified
+- "conda init bash" was run automatically.
 - Removal:
     rm -rf "${PREFIX}"
+    # and revert changes to ~/.bashrc
 
 EOF
