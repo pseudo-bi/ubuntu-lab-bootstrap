@@ -1,52 +1,47 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-# shellcheck disable=SC1091
-source "$ROOT_DIR/config.sh"
+PREFIX="${HOME}/miniconda3"
+INSTALLER="Miniconda3-latest-Linux-x86_64.sh"
+URL="https://repo.anaconda.com/miniconda/${INSTALLER}"
 
-MINICONDA_DIR="$CONDA_DIR"
-
-if [ ! -d "$MINICONDA_DIR" ]; then
-  cd /tmp
-  case "$(uname -m)" in
-    x86_64)  ARCH="x86_64" ;;
-    aarch64) ARCH="aarch64" ;;
-    *)
-      echo "Unsupported architecture: $(uname -m)"
-      exit 1
-      ;;
-  esac
-
-  INSTALLER="Miniconda3-latest-Linux-${ARCH}.sh"
-  curl -fsSLO "https://repo.anaconda.com/miniconda/${INSTALLER}"
-  bash "${INSTALLER}" -b -p "$MINICONDA_DIR"
+if [ -d "${PREFIX}" ]; then
+  echo "Miniconda already exists at ${PREFIX}"
+  echo "To reinstall cleanly:"
+  echo "  rm -rf \"${PREFIX}\""
+  exit 1
 fi
 
-BASHRC="$HOME/.bashrc"
-CONDASH_LINE=". \"$MINICONDA_DIR/etc/profile.d/conda.sh\""
+cd "${HOME}"
 
-if ! grep -q "$CONDASH_LINE" "$BASHRC"; then
-  {
-    echo ""
-    echo "# conda setup"
-    echo "$CONDASH_LINE"
-  } >> "$BASHRC"
+if command -v curl >/dev/null 2>&1; then
+  curl -fsSLO "${URL}"
+elif command -v wget >/dev/null 2>&1; then
+  wget -q "${URL}" -O "${INSTALLER}"
+else
+  echo "Neither curl nor wget is available."
+  exit 1
 fi
 
-# shellcheck disable=SC2016
-LAB_BLOCK="
-# auto-activate ${CONDA_ENV_NAME} conda env (interactive shells only)
-if [[ \$- == *i* ]]; then
-  if [ -f \"\$HOME/miniconda3/etc/profile.d/conda.sh\" ]; then
-    . \"\$HOME/miniconda3/etc/profile.d/conda.sh\"
-    conda activate ${CONDA_ENV_NAME} >/dev/null 2>&1 || true
-  fi
-fi
-"
+bash "${INSTALLER}" -b -p "${PREFIX}"
+rm -f "${INSTALLER}"
 
-if ! grep -q "auto-activate ${CONDA_ENV_NAME} conda env" "$BASHRC"; then
-  echo "$LAB_BLOCK" >> "$BASHRC"
-fi
+"${PREFIX}/bin/conda" --version
 
-echo "miniconda setup finished (${CONDA_ENV_NAME} will auto-activate on login)"
+cat <<'EOF'
+
+Miniconda installation finished.
+
+To use conda in this shell:
+  . "$HOME/miniconda3/etc/profile.d/conda.sh"
+
+To activate base environment:
+  conda activate base
+
+Notes:
+- This script does not run "conda init"
+- No shell config files were modified
+- Removal:
+    rm -rf ~/miniconda3
+
+EOF
